@@ -1,30 +1,35 @@
-const express = require("express");
-const router = express.Router();
-const { MongoClient } = require("mongodb");
-const { Resend } = require("resend");
+import { MongoClient } from "mongodb";
+import { Resend } from "resend";
 
+let cachedClient = null;
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-router.post("/", async (req, res) => {
+export default async function handler(req, res) {
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
+
   const { householdId, responses, email } = req.body;
 
-  if (!householdId || !responses)
+  if (!householdId || !responses) {
     return res.status(400).json({ error: "Missing fields" });
+  }
 
   try {
-    const client = await MongoClient.connect(process.env.MONGO_URL);
-    const db = client.db("wedding");
+    if (!cachedClient) {
+      cachedClient = new MongoClient(process.env.MONGO_URL);
+      await cachedClient.connect();
+    }
 
+    const db = cachedClient.db("wedding");
     const rsvp = db.collection("rsvp");
 
-    // Save RSVP
     await rsvp.updateOne(
       { householdId },
       { $set: { responses, submittedAt: new Date(), email } },
       { upsert: true }
     );
 
-    // Build email body
     const html = `
       <h2>Your RSVP has been received!</h2>
       <p>Here are your responses:</p>
@@ -43,7 +48,6 @@ router.post("/", async (req, res) => {
       <p>We can't wait to celebrate with you! ♥</p>
     `;
 
-    // Send confirmation
     await resend.emails.send({
       from: "wedding@sabina-michael.com",
       to: email,
@@ -51,11 +55,9 @@ router.post("/", async (req, res) => {
       html
     });
 
-    res.json({ success: true });
+    return res.json({ success: true });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Server error" });
+    console.error("SUBMIT ERROR:", err);
+    return res.status(500).json({ error: "Server error" });
   }
-});
-
-module.exports = router;
+}

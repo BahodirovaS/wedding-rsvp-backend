@@ -1,33 +1,43 @@
-const express = require("express");
-const router = express.Router();
-const { MongoClient } = require("mongodb");
+import { MongoClient } from "mongodb";
 
-router.post("/", async (req, res) => {
+let cachedClient = null;
+
+export default async function handler(req, res) {
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
+
   const { name } = req.body;
-
-  if (!name) return res.status(400).json({ error: "Missing name" });
+  if (!name) {
+    return res.status(400).json({ error: "Missing name" });
+  }
 
   try {
-    const client = await MongoClient.connect(process.env.MONGO_URL);
-    const db = client.db("wedding");
+    if (!cachedClient) {
+      cachedClient = new MongoClient(process.env.MONGO_URL);
+      await cachedClient.connect();
+    }
 
+    const db = cachedClient.db("wedding");
     const households = db.collection("households");
 
-    const lower = name.toLowerCase().trim();
+    const search = name.toLowerCase().trim();
 
     const match = await households.findOne({
-      lookup: { $in: [lower] }
+      lookup: { $in: [search] }
     });
 
     if (!match) {
       return res.status(404).json({ error: "No matching invitation found" });
     }
 
-    res.json({ household: match });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Server error" });
-  }
-});
+    return res.json({
+      householdId: match.id,
+      guests: match.guests
+    });
 
-module.exports = router;
+  } catch (err) {
+    console.error("FIND ERROR:", err);
+    return res.status(500).json({ error: "Server error" });
+  }
+}

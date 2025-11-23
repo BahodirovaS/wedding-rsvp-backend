@@ -12,92 +12,43 @@ async function getDb() {
   return cachedClient.db("wedding");
 }
 
-export default {
-  async fetch(request) {
-    if (request.method === "OPTIONS") {
-      return new Response(null, {
-        status: 204,
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Methods": "POST, OPTIONS",
-          "Access-Control-Allow-Headers": "Content-Type"
-        }
+export default async function handler(req, res) {
+  // CORS
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+
+  if (req.method === "OPTIONS") return res.status(204).end();
+  if (req.method !== "POST")
+    return res.status(405).json({ error: "Method not allowed" });
+
+  const { householdId, responses, email } = req.body;
+
+  if (!householdId || !responses)
+    return res.status(400).json({ error: "Missing fields" });
+
+  try {
+    const db = await getDb();
+    const rsvp = db.collection("rsvp");
+
+    await rsvp.updateOne(
+      { householdId },
+      { $set: { responses, submittedAt: new Date(), email } },
+      { upsert: true }
+    );
+
+    if (email) {
+      await resend.emails.send({
+        from: "wedding@sabina-michael.com",
+        to: email,
+        subject: "Your RSVP has been received!",
+        html: "<p>Thank you!</p>"
       });
     }
 
-    if (request.method !== "POST") {
-      return new Response(JSON.stringify({ error: "Method not allowed" }), {
-        status: 405,
-        headers: {
-          "Content-Type": "application/json",
-          "Access-Control-Allow-Origin": "*"
-        }
-      });
-    }
-
-    // ----- PARSE JSON -----
-    let body;
-    try {
-      body = await request.json();
-    } catch {
-      return new Response(JSON.stringify({ error: "Invalid JSON" }), {
-        status: 400,
-        headers: {
-          "Content-Type": "application/json",
-          "Access-Control-Allow-Origin": "*"
-        }
-      });
-    }
-
-    const { householdId, responses, email } = body;
-
-    if (!householdId || !responses) {
-      return new Response(JSON.stringify({ error: "Missing fields" }), {
-        status: 400,
-        headers: {
-          "Content-Type": "application/json",
-          "Access-Control-Allow-Origin": "*"
-        }
-      });
-    }
-
-    try {
-      const db = await getDb();
-      const rsvp = db.collection("rsvp");
-
-      await rsvp.updateOne(
-        { householdId },
-        { $set: { responses, submittedAt: new Date(), email } },
-        { upsert: true }
-      );
-
-      // OPTIONAL: send email
-      if (email) {
-        await resend.emails.send({
-          from: "wedding@sabina-michael.com",
-          to: email,
-          subject: "Your RSVP has been received",
-          html: "<p>Thank you for your RSVP!</p>"
-        });
-      }
-
-      return new Response(JSON.stringify({ success: true }), {
-        status: 200,
-        headers: {
-          "Content-Type": "application/json",
-          "Access-Control-Allow-Origin": "*"
-        }
-      });
-
-    } catch (err) {
-      console.error("SUBMIT ERROR:", err);
-      return new Response(JSON.stringify({ error: "Server error" }), {
-        status: 500,
-        headers: {
-          "Content-Type": "application/json",
-          "Access-Control-Allow-Origin": "*"
-        }
-      });
-    }
+    res.json({ success: true });
+  } catch (err) {
+    console.log("SUBMIT ERROR:", err);
+    res.status(500).json({ error: "Server error" });
   }
-};
+}

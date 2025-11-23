@@ -1,109 +1,46 @@
-export default {
-  async fetch(request) {
-    // Allow CORS preflight
-    if (request.method === "OPTIONS") {
-      return new Response(null, {
-        status: 204,
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Methods": "POST, OPTIONS",
-          "Access-Control-Allow-Headers": "Content-Type"
-        }
-      });
-    }
+import { MongoClient } from "mongodb";
 
-    if (request.method !== "POST") {
-      return new Response(
-        JSON.stringify({ error: "Method not allowed" }),
-        {
-          status: 405,
-          headers: {
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*"
-          }
-        }
-      );
-    }
+let cachedClient = null;
 
-    let body;
-    try {
-      body = await request.json();
-    } catch {
-      return new Response(
-        JSON.stringify({ error: "Invalid JSON" }),
-        {
-          status: 400,
-          headers: {
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*"
-          }
-        }
-      );
-    }
-
-    const { name } = body;
-
-    if (!name || typeof name !== "string") {
-      return new Response(
-        JSON.stringify({ error: "Missing name" }),
-        {
-          status: 400,
-          headers: {
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*"
-          }
-        }
-      );
-    }
-
-    try {
-      const db = await getDb();
-      const households = db.collection("households");
-
-      const search = name.toLowerCase().trim();
-
-      const match = await households.findOne({
-        lookup: { $in: [search] }
-      });
-
-      if (!match) {
-        return new Response(
-          JSON.stringify({ error: "No matching invitation found" }),
-          {
-            status: 404,
-            headers: {
-              "Content-Type": "application/json",
-              "Access-Control-Allow-Origin": "*"
-            }
-          }
-        );
-      }
-
-      return new Response(
-        JSON.stringify({
-          id: match.id,
-          guests: match.guests
-        }),
-        {
-          status: 200,
-          headers: {
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*"
-          }
-        }
-      );
-    } catch (err) {
-      console.error("FIND ERROR:", err);
-      return new Response(
-        JSON.stringify({ error: "Server error" }),
-        {
-          status: 500,
-          headers: {
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*"
-          }
-        }
-      );
-    }
+async function getDb() {
+  if (!cachedClient) {
+    cachedClient = new MongoClient(process.env.MONGO_URL);
+    await cachedClient.connect();
   }
-};
+  return cachedClient.db("wedding");
+}
+
+export default async function handler(req, res) {
+  // CORS
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+
+  if (req.method === "OPTIONS") return res.status(204).end();
+  if (req.method !== "POST")
+    return res.status(405).json({ error: "Method not allowed" });
+
+  const { name } = req.body;
+  if (!name) return res.status(400).json({ error: "Missing name" });
+
+  try {
+    const db = await getDb();
+    const households = db.collection("households");
+
+    const search = name.toLowerCase().trim();
+
+    const match = await households.findOne({
+      lookup: { $in: [search] }
+    });
+
+    if (!match) return res.status(404).json({ error: "No matching invitation found" });
+
+    res.json({
+      id: match.id,
+      guests: match.guests
+    });
+  } catch (err) {
+    console.log("FIND ERROR:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+}

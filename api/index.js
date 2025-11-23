@@ -5,15 +5,12 @@ import { Resend } from "resend";
 const app = express();
 app.use(express.json());
 
-// ===== Shared Mongo + Resend setup =====
+// ===== Shared Mongo & Resend =====
 let cachedClient = null;
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 async function getDb() {
   if (!cachedClient) {
-    if (!process.env.MONGO_URL) {
-      throw new Error("MONGO_URL not set");
-    }
     cachedClient = new MongoClient(process.env.MONGO_URL);
     await cachedClient.connect();
   }
@@ -32,10 +29,8 @@ app.post("/api/find", async (req, res) => {
     const db = await getDb();
     const households = db.collection("households");
 
-    const search = name.toLowerCase().trim();
-
     const match = await households.findOne({
-      lookup: { $in: [search] }
+      lookup: { $in: [name.toLowerCase().trim()] }
     });
 
     if (!match) {
@@ -70,34 +65,6 @@ app.post("/api/submit", async (req, res) => {
       { upsert: true }
     );
 
-    // Build confirmation email HTML
-    const html = `
-      <h2>Your RSVP has been received!</h2>
-      <p>Here are your responses:</p>
-      <ul>
-        ${responses
-          .map(
-            (r) => `
-              <li><strong>${r.name}</strong><br/>
-                  Wedding Day: ${r.wedding}<br/>
-                  Welcome Dinner: ${r.dinner}
-              </li>
-            `
-          )
-          .join("")}
-      </ul>
-      <p>We can't wait to celebrate with you! ♥</p>
-    `;
-
-    if (email) {
-      await resend.emails.send({
-        from: "wedding@sabina-michael.com",
-        to: email,
-        subject: "Your RSVP is confirmed!",
-        html
-      });
-    }
-
     return res.json({ success: true });
   } catch (err) {
     console.error("SUBMIT ERROR:", err);
@@ -105,5 +72,7 @@ app.post("/api/submit", async (req, res) => {
   }
 });
 
-// Export the Express app for Vercel
-export default app;
+// ==== REQUIRED EXPORT FOR VERCEL SERVERLESS EXPRESS ====
+export default function handler(req, res) {
+  return app(req, res);
+}

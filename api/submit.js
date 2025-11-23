@@ -6,66 +6,59 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 
 async function getDb() {
   if (!cachedClient) {
-    if (!process.env.MONGO_URL) {
-      throw new Error("MONGO_URL not set");
-    }
     cachedClient = new MongoClient(process.env.MONGO_URL);
     await cachedClient.connect();
   }
   return cachedClient.db("wedding");
 }
 
-export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
-  }
-
-  const { householdId, responses, email } = req.body;
-
-  if (!householdId || !responses) {
-    return res.status(400).json({ error: "Missing fields" });
-  }
-
-  try {
-    const db = await getDb();
-    const rsvp = db.collection("rsvp");
-
-    await rsvp.updateOne(
-      { householdId },
-      { $set: { responses, submittedAt: new Date(), email } },
-      { upsert: true }
-    );
-
-    const html = `
-      <h2>Your RSVP has been received!</h2>
-      <p>Here are your responses:</p>
-      <ul>
-        ${responses
-          .map(
-            (r) => `
-              <li><strong>${r.name}</strong><br/>
-                  Wedding Day: ${r.wedding}<br/>
-                  Welcome Dinner: ${r.dinner}
-              </li>
-            `
-          )
-          .join("")}
-      </ul>
-      <p>We can't wait to celebrate with you! ♥</p>
-    `;
-
-    if (email) {
-      await resend.emails.send({
-        from: "wedding@sabina-michael.com",
-        to: email,
-        subject: "Your RSVP is confirmed!",
-        html
+export default {
+  async fetch(request) {
+    if (request.method !== "POST") {
+      return new Response(JSON.stringify({ error: "Method not allowed" }), {
+        status: 405,
+        headers: { "Content-Type": "application/json" }
       });
     }
 
-    return res.json({ success: true });
-  } catch (err) {
-    console.error("SUBMIT ERROR:", err);
-    return res.status(500).json({ error: "Server error" });
+    let body;
+    try {
+      body = await request.json();
+    } catch {
+      return new Response(JSON.stringify({ error: "Invalid JSON" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+
+    const { householdId, responses, email } = body;
+
+    if (!householdId || !responses) {
+      return new Response(JSON.stringify({ error: "Missing fields" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+
+    try {
+      const db = await getDb();
+      const rsvp = db.collection("rsvp");
+
+      await rsvp.updateOne(
+        { householdId },
+        { $set: { responses, submittedAt: new Date(), email } },
+        { upsert: true }
+      );
+
+      return new Response(JSON.stringify({ success: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      });
+    } catch (err) {
+      return new Response(JSON.stringify({ error: "Server error" }), {
+        status: 500,
+        headers: { "Content-Type": "application/json" }
+      });
+    }
   }
-}
+};

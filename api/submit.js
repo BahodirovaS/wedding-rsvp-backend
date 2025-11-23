@@ -9,7 +9,7 @@ async function getDb() {
     cachedClient = new MongoClient(process.env.MONGO_URL);
     await cachedClient.connect();
   }
-  return cachedClient.db("wedding");
+  return cachedClient.db("Wedding");
 }
 
 export default async function handler(req, res) {

@@ -14,20 +14,38 @@ async function getDb() {
 
 export default {
   async fetch(request) {
-    if (request.method !== "POST") {
-      return new Response(JSON.stringify({ error: "Method not allowed" }), {
-        status: 405,
-        headers: { "Content-Type": "application/json" }
+    if (request.method === "OPTIONS") {
+      return new Response(null, {
+        status: 204,
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "POST, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type"
+        }
       });
     }
 
+    if (request.method !== "POST") {
+      return new Response(JSON.stringify({ error: "Method not allowed" }), {
+        status: 405,
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*"
+        }
+      });
+    }
+
+    // ----- PARSE JSON -----
     let body;
     try {
       body = await request.json();
     } catch {
       return new Response(JSON.stringify({ error: "Invalid JSON" }), {
         status: 400,
-        headers: { "Content-Type": "application/json" }
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*"
+        }
       });
     }
 
@@ -36,7 +54,10 @@ export default {
     if (!householdId || !responses) {
       return new Response(JSON.stringify({ error: "Missing fields" }), {
         status: 400,
-        headers: { "Content-Type": "application/json" }
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*"
+        }
       });
     }
 
@@ -50,14 +71,32 @@ export default {
         { upsert: true }
       );
 
+      // OPTIONAL: send email
+      if (email) {
+        await resend.emails.send({
+          from: "wedding@sabina-michael.com",
+          to: email,
+          subject: "Your RSVP has been received",
+          html: "<p>Thank you for your RSVP!</p>"
+        });
+      }
+
       return new Response(JSON.stringify({ success: true }), {
         status: 200,
-        headers: { "Content-Type": "application/json" }
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*"
+        }
       });
+
     } catch (err) {
+      console.error("SUBMIT ERROR:", err);
       return new Response(JSON.stringify({ error: "Server error" }), {
         status: 500,
-        headers: { "Content-Type": "application/json" }
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*"
+        }
       });
     }
   }

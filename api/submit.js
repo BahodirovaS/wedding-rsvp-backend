@@ -45,7 +45,7 @@ export default async function handler(req, res) {
         subject: "Your RSVP has been received!",
         html: `
       <div style="font-family: 'Georgia', serif; background:#f9f6ef; padding:30px; color:#4a4032; line-height:1.6;">
-        <div style="max-width:600px; margin:0 auto; background:#ffffff; padding:30px; border:1px solid #e2dcd2;">
+        <div style="max-width:600px; margin:0 auto; background:#ffffff; padding:30px; border:1px solid #893941;">
           <h2 style="font-family:'Pinyon Script', cursive; font-size:36px; margin:0; text-align:center; color:#4a4032;">
             Sabina & Michael
           </h2>

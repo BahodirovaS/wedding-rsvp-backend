@@ -87,7 +87,7 @@ export default async function handler(req, res) {
 
           const welcomeAnswer = toYesNo(guest.welcomeDinner || guest.welcome || guest.attendingWelcome);
           const weddingAnswer = toYesNo(guest.wedding || guest.ceremony || guest.attendingWedding);
-          const dinnerChoice = guest.dinnerChoice || guest.entree || "no selection";
+          const dinnerChoice = guest.dinner || guest.dinnerChoice || guest.entree || "no selection";
           const allergiesText =
             guest.allergies && guest.allergies.trim() !== ""
               ? guest.allergies.trim()
